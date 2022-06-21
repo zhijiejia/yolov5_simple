@@ -7,6 +7,6 @@ python train.py \
 --cos-lr \
 --multi-scale \
 --device 2 \
---epoch 1 \
+--epoch 80 \
 --save-period 1 \
 --hyp data/hyps/hyp.scratch-high.yaml \
