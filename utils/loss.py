@@ -125,7 +125,7 @@ class ComputeLoss:
         tcls, tbox, indices, anchors = self.build_targets(p, targets)  # targets
 
         # Losses
-        for i, pi in enumerate(p):  # layer index, layer predictions
+        for i, pi in enumerate(p):  # layer index, layer predictions, pi-shape: [bs, 3, gridx, gridy, 85]
             b, a, gj, gi = indices[i]  # image, anchor, gridy, gridx
             tobj = torch.zeros(pi.shape[:4], dtype=pi.dtype, device=self.device)  # target obj
 
@@ -176,7 +176,7 @@ class ComputeLoss:
 
     def build_targets(self, p, targets):
         # Build targets for compute_loss(), input targets(image,class,x,y,w,h)
-        na, nt = self.na, targets.shape[0]  # number of anchors, targets
+        na, nt = self.na, targets.shape[0]  # number of anchors(P5: 3, P6: 4), targets
         tcls, tbox, indices, anch = [], [], [], []
         gain = torch.ones(7, device=self.device)  # normalized to gridspace gain
         ai = torch.arange(na, device=self.device).float().view(na, 1).repeat(1, nt)  # same as .repeat_interleave(nt)

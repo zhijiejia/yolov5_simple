@@ -23,10 +23,9 @@ if platform.system() != 'Windows':
 from models.common import *
 from models.experimental import *
 from utils.autoanchor import check_anchor_order
-from utils.general import LOGGER, check_version, check_yaml, make_divisible, print_args
+from utils.general import LOGGER, check_yaml, make_divisible, print_args
 from utils.plots import feature_visualization
-from utils.torch_utils import (fuse_conv_and_bn, initialize_weights, model_info, profile, scale_img, select_device,
-                               time_sync)
+from utils.torch_utils import (fuse_conv_and_bn, initialize_weights, model_info, profile, scale_img, time_sync)
 
 try:
     import thop  # for FLOPs computation
@@ -48,15 +47,16 @@ class Detect(nn.Module):
         self.grid = [torch.zeros(1)] * self.nl  # init grid
         self.anchor_grid = [torch.zeros(1)] * self.nl  # init anchor grid
         self.register_buffer('anchors', torch.tensor(anchors).float().view(self.nl, -1, 2))  # shape(nl,na,2)
-        self.m = nn.ModuleList(nn.Conv2d(x, self.no * self.na, 1) for x in ch)  # output conv
+        self.m = nn.ModuleList(nn.Conv2d(x, self.no * self.na, 1) for x in ch)  # output conv(输出通道数为 85 * 3, 对于COCO), ch: 输入不同detect-layer的特征通道数, 是一个list
         self.inplace = inplace  # use in-place ops (e.g. slice assignment)
 
-    def forward(self, x):
-        z = []  # inference output
-        for i in range(self.nl):
-            x[i] = self.m[i](x[i])  # conv
-            bs, _, ny, nx = x[i].shape  # x(bs,255,20,20) to x(bs,3,20,20,85)
+    def forward(self, x):               # 输入x: x是一个list, 其中有多个特征图, 分别来自不同的层, 用于不同的detect检测层
+        z = []  # inference output  
+        for i in range(self.nl):        # self.nl: Detect有几个检测层
+            x[i] = self.m[i](x[i])      # conv
+            bs, _, ny, nx = x[i].shape  # x[i]-shape: (bs,255,20,20)
             x[i] = x[i].view(bs, self.na, self.no, ny, nx).permute(0, 1, 3, 4, 2).contiguous()
+                                        # x[i]-shape: (bs,255,20,20) to (bs,3,20,20,85)
 
             if not self.training:  # inference
                 if self.onnx_dynamic or self.grid[i].shape[2:4] != x[i].shape[2:4]:
@@ -74,18 +74,16 @@ class Detect(nn.Module):
                 z.append(y.view(bs, -1, self.no))
 
         return x if self.training else (torch.cat(z, 1),) if self.export else (torch.cat(z, 1), x)
+        # x if self.training else { (torch.cat(z, 1),) if self.export else (torch.cat(z, 1), x) }
 
     def _make_grid(self, nx=20, ny=20, i=0):
         d = self.anchors[i].device
         t = self.anchors[i].dtype
         shape = 1, self.na, ny, nx, 2  # grid shape
         y, x = torch.arange(ny, device=d, dtype=t), torch.arange(nx, device=d, dtype=t)
-        if check_version(torch.__version__, '1.10.0'):  # torch>=1.10.0 meshgrid workaround for torch>=0.7 compatibility
-            yv, xv = torch.meshgrid(y, x, indexing='ij')
-        else:
-            yv, xv = torch.meshgrid(y, x)
+        yv, xv = torch.meshgrid(y, x, indexing='ij')
         grid = torch.stack((xv, yv), 2).expand(shape) - 0.5  # add grid offset, i.e. y = 2.0 * x - 0.5
-        anchor_grid = (self.anchors[i] * self.stride[i]).view((1, self.na, 1, 1, 2)).expand(shape)
+        anchor_grid = (self.anchors[i] * self.stride[i]).view((1, self.na, 1, 1, 2)).expand(shape)   # 乘以stride, 因为125行除以了stride
         return grid, anchor_grid
 
 
@@ -118,7 +116,7 @@ class Model(nn.Module):
         if isinstance(m, Detect):
             s = 256  # 2x min stride
             m.inplace = self.inplace
-            m.stride = torch.tensor([s / x.shape[-2] for x in self.forward(torch.zeros(1, ch, s, s))])  # forward
+            m.stride = torch.tensor([s / x.shape[-2] for x in self.forward(torch.zeros(1, ch, s, s))])  # forward 计算detect的3层的stride
             check_anchor_order(m)  # must be in pixel-space (not grid-space)
             m.anchors /= m.stride.view(-1, 1, 1)
             self.stride = m.stride
@@ -216,8 +214,7 @@ class Model(nn.Module):
         m = self.model[-1]  # Detect() module
         for mi in m.m:  # from
             b = mi.bias.detach().view(m.na, -1).T  # conv.bias(255) to (3,85)
-            LOGGER.info(
-                ('%6g Conv2d.bias:' + '%10.3g' * 6) % (mi.weight.shape[1], *b[:5].mean(1).tolist(), b[5:].mean()))
+            LOGGER.info(('%6g Conv2d.bias:' + '%10.3g' * 6) % (mi.weight.shape[1], *b[:5].mean(1).tolist(), b[5:].mean()))
 
     # def _print_weights(self):
     #     for m in self.model.modules():
@@ -314,7 +311,7 @@ if __name__ == '__main__':
     opt = parser.parse_args()
     opt.cfg = check_yaml(opt.cfg)  # check YAML
     print_args(vars(opt))
-    device = select_device(opt.device)
+    device = torch.device(f'cuda:{opt.device}')
 
     # Create model
     im = torch.rand(opt.batch_size, 3, 640, 640).to(device)

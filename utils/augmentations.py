@@ -95,7 +95,7 @@ def letterbox(im, new_shape=(640, 640), color=(114, 114, 114), auto=True, scaleF
         new_shape = (new_shape, new_shape)
 
     # Scale ratio (new / old)
-    r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
+    r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])   # 如果rect=True, 那么长边就是640, 短边<=640, 则r=1, 也就导致rect后, letter_box不会再改变shape
     if not scaleup:  # only scale down, do not scale up (for better val mAP)
         r = min(r, 1.0)
 
@@ -136,30 +136,30 @@ def random_perspective(im,
     height = im.shape[0] + border[0] * 2  # shape(h,w,c)
     width = im.shape[1] + border[1] * 2
 
-    # Center
+    # Center        平移变换, 把图像的中心点移动到坐标系的原点
     C = np.eye(3)
     C[0, 2] = -im.shape[1] / 2  # x translation (pixels)
     C[1, 2] = -im.shape[0] / 2  # y translation (pixels)
 
-    # Perspective
+    # Perspective   透视变换
     P = np.eye(3)
     P[2, 0] = random.uniform(-perspective, perspective)  # x perspective (about y)
     P[2, 1] = random.uniform(-perspective, perspective)  # y perspective (about x)
 
-    # Rotation and Scale
+    # Rotation and Scale    旋转 和 缩放 变换
     R = np.eye(3)
     a = random.uniform(-degrees, degrees)
     # a += random.choice([-180, -90, 0, 90])  # add 90deg rotations to small rotations
     s = random.uniform(1 - scale, 1 + scale)
     # s = 2 ** random.uniform(-scale, scale)
-    R[:2] = cv2.getRotationMatrix2D(angle=a, center=(0, 0), scale=s)
+    R[:2] = cv2.getRotationMatrix2D(angle=a, center=(0, 0), scale=s)    # 按照坐标系原点旋转, 返回(2, 3)的矩阵
 
-    # Shear
+    # Shear                 错切变换
     S = np.eye(3)
     S[0, 1] = math.tan(random.uniform(-shear, shear) * math.pi / 180)  # x shear (deg)
     S[1, 0] = math.tan(random.uniform(-shear, shear) * math.pi / 180)  # y shear (deg)
 
-    # Translation
+    # Translation          平移变换
     T = np.eye(3)
     T[0, 2] = random.uniform(0.5 - translate, 0.5 + translate) * width  # x translation (pixels)
     T[1, 2] = random.uniform(0.5 - translate, 0.5 + translate) * height  # y translation (pixels)
@@ -203,7 +203,7 @@ def random_perspective(im,
             # create new boxes
             x = xy[:, [0, 2, 4, 6]]
             y = xy[:, [1, 3, 5, 7]]
-            new = np.concatenate((x.min(1), y.min(1), x.max(1), y.max(1))).reshape(4, n).T
+            new = np.concatenate((x.min(1), y.min(1), x.max(1), y.max(1)), axis=0).reshape(4, n).T
 
             # clip
             new[:, [0, 2]] = new[:, [0, 2]].clip(0, width)
@@ -280,5 +280,5 @@ def box_candidates(box1, box2, wh_thr=2, ar_thr=100, area_thr=0.1, eps=1e-16):  
     # Compute candidate boxes: box1 before augment, box2 after augment, wh_thr (pixels), aspect_ratio_thr, area_ratio
     w1, h1 = box1[2] - box1[0], box1[3] - box1[1]
     w2, h2 = box2[2] - box2[0], box2[3] - box2[1]
-    ar = np.maximum(w2 / (h2 + eps), h2 / (w2 + eps))  # aspect ratio
+    ar = np.maximum(w2 / (h2 + eps), h2 / (w2 + eps))  # 宽高比, aspect ratio
     return (w2 > wh_thr) & (h2 > wh_thr) & (w2 * h2 / (w1 * h1 + eps) > area_thr) & (ar < ar_thr)  # candidates

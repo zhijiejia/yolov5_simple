@@ -89,14 +89,14 @@ def run(
 
     # Load model
     device = select_device(device)
-    model = DetectMultiBackend(weights, device=device, dnn=dnn, data=data, fp16=half)
+    model = DetectMultiBackend(weights, device=device, dnn=dnn, data=data, fp16=half)   # 判断输入的weight地址, 来判断weight的模型参数是又什么框架训练得来的, 从而在加载的时候选择不同的加载方式
     stride, names, pt = model.stride, model.names, model.pt
     imgsz = check_img_size(imgsz, s=stride)  # check image size
 
     # Dataloader
     if webcam:
         view_img = check_imshow()
-        cudnn.benchmark = True  # set True to speed up constant image size inference
+        cudnn.benchmark = False  # set True to speed up constant image size inference
         dataset = LoadStreams(source, img_size=imgsz, stride=stride, auto=pt)
         bs = len(dataset)  # batch_size
     else:
@@ -105,7 +105,7 @@ def run(
     vid_path, vid_writer = [None] * bs, [None] * bs
 
     # Run inference
-    model.warmup(imgsz=(1 if pt else bs, 3, *imgsz))  # warmup
+    model.warmup(imgsz=(1 if pt else bs, 3, *imgsz))  # warmup, 先生成一张随机图像, 输入模型中, 使得GPU预热, 这样正式跑起来的时候, 比较快
     dt, seen = [0.0, 0.0, 0.0], 0
     for path, im, im0s, vid_cap, s in dataset:
         t1 = time_sync()
@@ -118,13 +118,13 @@ def run(
         dt[0] += t2 - t1
 
         # Inference
-        visualize = increment_path(save_dir / Path(path).stem, mkdir=True) if visualize else False
-        pred = model(im, augment=augment, visualize=visualize)
+        visualize = increment_path(save_dir / Path(path).stem, mkdir=True) if visualize else False   # 实验记录的文件夹命名顺序增长, 比如前一个是: run/exp1, 现在是: run/exp2
+        pred = model(im, augment=augment, visualize=visualize)     # [bs, predict_num_box, 85], 85 = 1 + 4 + num_classes
         t3 = time_sync()
         dt[1] += t3 - t2
 
         # NMS
-        pred = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)
+        pred = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)   # nms  [bs, num_box, 6], num_box: nms后留下的最终预测的检测框数目 6 = 左上 + 右下的x、y坐标 + 置信度 + 该检测框的预测类别
         dt[2] += time_sync() - t3
 
         # Second-stage classifier (optional)
@@ -132,6 +132,7 @@ def run(
 
         # Process predictions
         for i, det in enumerate(pred):  # per image
+            # det: [num_box, 6]
             seen += 1
             if webcam:  # batch_size >= 1
                 p, im0, frame = path[i], im0s[i].copy(), dataset.count
@@ -140,7 +141,7 @@ def run(
                 p, im0, frame = path, im0s.copy(), getattr(dataset, 'frame', 0)
 
             p = Path(p)  # to Path
-            save_path = str(save_dir / p.name)  # im.jpg
+            save_path = str(save_dir / p.name)  # im.jpg    # 这里可以进行 字符串 / 字符串, 是因为save_dir 和 p 都是Path对象, 因该是这个类重写了除法操作
             txt_path = str(save_dir / 'labels' / p.stem) + ('' if dataset.mode == 'image' else f'_{frame}')  # im.txt
             s += '%gx%g ' % im.shape[2:]  # print string
             gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh

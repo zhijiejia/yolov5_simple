@@ -186,11 +186,11 @@ def print_args(args: Optional[dict] = None, show_file=True, show_fcn=False):
 def init_seeds(seed=0):
     # Initialize random number generator (RNG) seeds https://pytorch.org/docs/stable/notes/randomness.html
     # cudnn seed 0 settings are slower and more reproducible, else faster and less reproducible
-    import torch.backends.cudnn as cudnn
+    # import torch.backends.cudnn as cudnn
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    cudnn.benchmark, cudnn.deterministic = (False, True) if seed == 0 else (True, False)
+    # cudnn.benchmark, cudnn.deterministic = (False, True) if seed == 0 else (True, False)
 
 
 def intersect_dicts(da, db, exclude=()):
@@ -732,7 +732,6 @@ def clip_coords(boxes, shape):
         boxes[:, [0, 2]] = boxes[:, [0, 2]].clip(0, shape[1])  # x1, x2
         boxes[:, [1, 3]] = boxes[:, [1, 3]].clip(0, shape[0])  # y1, y2
 
-
 def non_max_suppression(prediction,
                         conf_thres=0.25,
                         iou_thres=0.45,
@@ -750,7 +749,6 @@ def non_max_suppression(prediction,
     bs = prediction.shape[0]  # batch size
     nc = prediction.shape[2] - 5  # number of classes
     xc = prediction[..., 4] > conf_thres  # candidates
-
     # Checks
     assert 0 <= conf_thres <= 1, f'Invalid Confidence threshold {conf_thres}, valid values are between 0.0 and 1.0'
     assert 0 <= iou_thres <= 1, f'Invalid IoU {iou_thres}, valid values are between 0.0 and 1.0'
@@ -770,7 +768,6 @@ def non_max_suppression(prediction,
         # Apply constraints
         # x[((x[..., 2:4] < min_wh) | (x[..., 2:4] > max_wh)).any(1), 4] = 0  # width-height
         x = x[xc[xi]]  # confidence
-
         # Cat apriori labels if autolabelling
         if labels and len(labels[xi]):
             lb = labels[xi]
